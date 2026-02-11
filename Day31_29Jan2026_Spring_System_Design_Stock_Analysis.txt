@@ -1,0 +1,155 @@
+Stock Analysis:
+==============
+Finhub Stock API(https://finnhub.io/): Provides real time data for stock Analysis.
+
+PostMan(User) -> API GateWay(8080) ->/stock/full-analysis/
+
+The Stock Analysis system implements a micrsoservices based architecture for real time 
+stock data collection analysis and pattern recognition using spring boot.
+It is composed of following four independent micro services 
+that communicate internally using REST APIs.
+Each micro service is responsible for a specific domain function and can be developed, 
+deployed and scaled independently.
+
+
+1. Stock Fetcher Service(8081): Depends on External Finhub API
+   Fetches the live market data from Finhub API and  cashes the result into local MySQL database.
+
+2. Stock Analysis Service(8082): Depends on Stock Fetcher Service 
+   Performs analysis(average price, daily change%)
+
+3. Stock Pattern Service(8083):  Depends on Stock Analysis Service.
+   Detects trading patterns(Up trend, Down trend, Sideways)
+   
+4. API GateWay(8080): Depends on above three micro services.
+   Provides the single entry point and orchestrates calls to all micro services.
+
+Data Flow:
+=========
+1.The client sends a request to the API Gateway.
+2.The API Gateway invokes:
+  The Fetcher service to receive the data.
+  The Analysis service computes average and daily change percentage.
+  The Pattern Service detects trading patterns.
+3.The API Gateway aggregates responses from all services and returns unified JSON response to the client.
+
+High Level Design(HLD)
+======================
+Objectives:
+1. Modular microservice design using Spring Boot.
+2. Each microservice maintains its own database.
+3. Asynchronous orchestration through API gateway.
+4. Clear seprationof concerns
+
+Key Components:
+1. API Gateway: Routing, composition, error handling, aggregation
+2. Fetcher Service: Data acquisition and caching
+3. Analysis Service: Calculation of derived metrics
+4. Pattern Service: Pattern detection and persistence
+5. Database: MySQL
+6. External API: Finhub public API
+
+Low Level Design(LLD)
+=====================
+1. API Contracts
+
+
+Stock Fetcher Service(8081)
+=======================
+* POST   /stocks/fetch/{symbol}
+Response:
+{
+ "id":1,
+ "symbol":"AAPL",
+ "price":178.35,
+ "change":1.25,
+ "fetchedAt":"2026-01-29T15:35:00"
+}
+
+Stock Analysis Service(8082)
+============================
+* GET   /analysis/average/{symbol}
+Returns the latest average price.
+
+* GET  /analysis/cahngePercent/{symbol}
+Returns percentage change in price.
+
+Stock Pattern Service(8083)
+===========================
+* POST    /patterns/analyze/{symbol}/{timeFrame}
+Response:
+{
+ {
+ "id": 1,
+ "symbol":"AAPL",
+ "patterType":"uptrend",
+ "timeFrame":"1D",
+ "detectedAt":"2026-01-29T16:35:05"
+ }
+}
+
+* GET  /patterns/{symbol}
+Returns a list of saved patterns
+
+* POST  /stock/full-analysis/{symbol}
+Response:
+{
+"status": "Success",
+"stockData": {...},
+"analysis":{"averagePrice":189:35, "dailyChangePercent":0.67},
+"pattern":{{"patternType":"Uptrend"}}
+
+}
+
+
+Caller				Callee					Method				Purpose
+API Gateway			Fetcher Service			POST				Get live stock data
+API Gateway			Analysis Service		GET					Calculates metrics
+API Gateway			Pattern Service			POST				Detects patterns
+Analysis Service	Fetcher Service			POST				Obtain the latest price for calculation
+Pattern Service		Analysis Service		GET					Retrieves metrics for pattern detection
+
+
+Exception Handling:
+==================
+* All inter-service calls are wrapped in try-catch blocks.
+* API GAteway aggregates responses, returns partial data even if a service fails.
+* Each service logs errors and continues operation without crashing.
+* Services handle null responses gracefully with fallback values.
+
+Schedulers:
+==========
+* Fetcher: Refresh cache periodically (every 10 minutes).
+* Patter: Auto-detect major stock patterns automatically.
+
+=====================================================================================
+
+creating microservice named  "stock_analysis_service"
+dependencies required: spring-boot-starter-web, spring-boot-starter-data-jpa, mysql-connector-j, lombok
+
+application.properties:
+======================
+spring.application.name=stock_analysis_service
+server.port:8082
+
+spring.datasource.url=jdbc:mysql://localhost:3306/analysis_db?createDatabaseIfNotExist=true
+spring.datasource.driverClassName=mysql.cj.jdbc.Driver
+spring.datasource.username=root
+spring.datasource.password=admin
+spring.jpa.hibernate.ddl.auto=update
+
+fetcher.service.url=http://localhost:8081/stocks/fecth
+
+@SpringBootApplication
+public class StockAnalysisServiceApplication{
+   public static void main(String[] args){
+   SpringApplication.run(StockAnalysisServiceApplication.class, args);
+}
+
+public class AnalysisController{
+
+getAverage(), getDailyCahange()
+
+}
+
+
