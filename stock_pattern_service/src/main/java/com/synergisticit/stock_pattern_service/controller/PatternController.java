@@ -2,6 +2,8 @@ package com.synergisticit.stock_pattern_service.controller;
 
 import com.synergisticit.stock_pattern_service.service.PatternService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -20,9 +22,10 @@ public class PatternController {
     }
 
     @PostMapping("/analyze/{symbol}/{timeFrame}")
-    public Map<String,Object> getStockPattern(@PathVariable("symbol") String symbol,
-               @PathVariable("timeFrame") String timeFrame){
-        Map<String,Object> response=  patternService.getStockPattern(symbol,timeFrame);
-        return response;
+    public ResponseEntity<Map<String,Object>> getStockPattern(@PathVariable("symbol") String symbol,
+                                                              @PathVariable("timeFrame") String timeFrame){
+
+            Map<String, Object> response = patternService.getStockPattern(symbol, timeFrame);
+            return ResponseEntity.ok(response);
     }
 }

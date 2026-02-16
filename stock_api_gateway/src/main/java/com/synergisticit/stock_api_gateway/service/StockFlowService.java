@@ -7,9 +7,11 @@ import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientException;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
 import reactor.core.publisher.Mono;
 
 import java.time.Duration;
+import java.util.HashMap;
 import java.util.Map;
 
 @Service
@@ -24,19 +26,25 @@ public class StockFlowService {
     @Value("${services.pattern-service.uri}")
     private String patternUrl;
 
-    public Mono<CombinedResponse> getFullStockAnalysis(String symbol) {
+    public Mono<Map<String,Object>> getFullStockAnalysis(String symbol) {
 
         Mono<Map<String,Object>> fetcherMono= getStockData(symbol);
+
         Mono<Map<String,Object>> metricsMono= getStockMetricsData(symbol);
         Mono<Map<String,Object>> patternMono= getStockPatternData(symbol);
-
-        Mono<CombinedResponse> combinedResponse= Mono.zip(fetcherMono,metricsMono,patternMono).map(t ->{
-
+        //Mono.zip(fetcher,metrics) is non-blocking and concurrent, but we want fetcher to be called and then analysismetrics.
+         /*Mono<CombinedResponse> combinedResponse= Mono.zip(fetcherMono,metricsMono,patternMono).map(t ->{
             System.out.println(t.getT3());
             CombinedResponse dto = new CombinedResponse(t.getT1(),t.getT2(),t.getT3());
             return dto;
-        });
-        System.out.println("End response "+combinedResponse);
+        });*/
+        Mono<Map<String,Object>> combinedResponse = getStockData(symbol)
+                .flatMap(fetcherData -> getStockMetricsData(symbol)
+                        .flatMap(metricsData -> getStockPatternData(symbol)
+                        .map(patternData -> combine(fetcherData,metricsData,patternData))
+                        )
+                );
+
         return combinedResponse;
     }
 
@@ -62,7 +70,15 @@ public class StockFlowService {
                 .bodyToMono(new ParameterizedTypeReference<Map<String,Object>>() {
                 })
                 .timeout(Duration.ofSeconds(4))
-                .onErrorResume(ex -> Mono.just(Map.of("Stock Analysis Service unavailable","")));
+                .onErrorResume(ex -> {
+                    System.out.println(ex.getMessage());
+                    System.out.println(ex.getClass());
+                  //  ex.printStackTrace();
+                    if(ex instanceof WebClientResponseException){
+                        return Mono.just(Map.of("Invalid Symbol ",symbol));
+                    }
+                   return Mono.just(Map.of("Stock Analysis Service unavailable",""));
+                });
     }
 
 
@@ -76,7 +92,26 @@ public class StockFlowService {
                 .bodyToMono(new ParameterizedTypeReference<Map<String,Object>>() {
                 })
                 .timeout(Duration.ofSeconds(4))
-                .onErrorResume(ex -> Mono.just(Map.of("Fetcher Service Unavailable","")) );
+                .onErrorResume(ex -> {
+                    if(ex instanceof WebClientResponseException){
+                        return Mono.just(Map.of("Invalid Symbol ",symbol));
+                    }
+                    return Mono.just(Map.of("Fetcher Service Unavailable",""));
+                });
         
+    }
+
+    public Map<String, Object> combine(
+            Map<String, Object> stock,
+            Map<String, Object> metrics,
+            Map<String, Object> analysis) {
+
+        Map<String, Object> result = new HashMap<>();
+
+        result.put("stockData", stock);
+        result.put("metricsData", metrics);
+        result.put("analysisData", analysis);
+
+        return result;
     }
 }

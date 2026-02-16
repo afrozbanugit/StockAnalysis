@@ -1,7 +1,9 @@
 package com.synergisticit.stock_api_gateway.dto;
 
 import com.fasterxml.jackson.annotation.JsonAnyGetter;
+import reactor.core.publisher.Mono;
 
+import java.util.HashMap;
 import java.util.Map;
 
 
@@ -41,6 +43,20 @@ public class CombinedResponse {
 
     public void setPattern(Map<String, Object> pattern) {
         this.pattern = pattern;
+    }
+
+    public Map<String, Object> combine(
+            Map<String, Object> stock,
+            Map<String, Object> metrics,
+            Map<String, Object> analysis) {
+
+        Map<String, Object> result = new HashMap<>();
+
+        result.put("stockData", stock);
+        result.put("metricsData", metrics);
+        result.put("analysisData", analysis);
+
+        return result;
     }
 
     @Override

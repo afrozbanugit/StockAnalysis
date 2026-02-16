@@ -2,14 +2,18 @@ package com.synergisticit.stock_pattern_service.service;
 
 import com.synergisticit.stock_pattern_service.entity.StockPattern;
 import com.synergisticit.stock_pattern_service.exceptions.InvalidResponseException;
+import com.synergisticit.stock_pattern_service.exceptions.InvalidSymbolException;
+import com.synergisticit.stock_pattern_service.exceptions.ServiceUnavailableException;
 import com.synergisticit.stock_pattern_service.repository.PatternRepository;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestTemplate;
+import org.springframework.web.client.*;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -34,9 +38,10 @@ public class PatternService {
         String url = analysisServiceUrl +"metrics/"+symbol;
         System.out.println("url "+ url);
         Map<String,Object> responseMap = new HashMap<>();
-        try {
-            Map<String, Object> analysisMap = restTemplate.getForObject(url, Map.class);
-            System.out.println("Analysis response map "+ analysisMap);
+
+            ResponseEntity<Map> response = restTemplate.getForEntity(url, Map.class);
+            System.out.println("Analysis response map "+ response.getBody());
+            Map analysisMap = response.getBody();
             if (analysisMap != null && !analysisMap.isEmpty()) {
                 double percentChange = (Double)analysisMap.get("percentChange");
                 System.out.println("percentChange "+percentChange);
@@ -49,18 +54,22 @@ public class PatternService {
                 responseMap.put("detectedAt",LocalDateTime.now());
                 return responseMap;
             }
-        }catch(Exception e){
-            System.out.println("Exception in stock Patterns " + e.getMessage());
-            e.printStackTrace();
-            throw new InvalidResponseException(e.getMessage());
-        }
         return responseMap;
     }
 
-    public Map<String,Object> analysisService_fallBack(Exception e){
-        System.out.println("Analysis service unavailable");
+    public Map<String,Object> analysisService_fallBack(String symbol, String timeFrame,Exception e){
+        System.out.println("Analysis service returned exception "+ e.getMessage() +" of type "+ e.getClass());
+        if(e instanceof HttpClientErrorException | e instanceof HttpServerErrorException){
+            if(((HttpStatusCodeException) e).getStatusCode().equals(HttpStatus.NOT_FOUND)){
+                throw new InvalidSymbolException(symbol);
+            }
+            throw new InvalidResponseException(e.getMessage());
+        }
+        if(e instanceof RestClientException){
+            throw new ServiceUnavailableException(e.getMessage());
+        }
         Map<String,Object> map = new HashMap<>();
-        map.put("Pattern service unavailable","");
+        map.put("Pattern service returned error",e.getMessage());
         return map;
     }
 

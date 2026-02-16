@@ -15,6 +15,7 @@ import org.springframework.cache.annotation.CachePut;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 import com.synergisticit.stock_fetch_service.mapper.MapToStockDataDto.*;
 
@@ -28,7 +29,9 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
+import static com.synergisticit.stock_fetch_service.mapper.MapToStockDataDto.mapResponseToStockData;
 import static com.synergisticit.stock_fetch_service.mapper.MapToStockDataDto.mapToDto;
+import static com.synergisticit.stock_fetch_service.mapper.MapToStockDataResponseDto.mapToResponseMap;
 
 @Service
 public class StockService {
@@ -42,37 +45,23 @@ public class StockService {
     private final static Logger logger = LoggerFactory.getLogger(StockService.class);
 
     @Cacheable(value = "stock_data",key ="#symbol" )
-    public StockDataDto fetchStockData(String symbol){
-        Map<String,Object> responseMap = fetchStockDataFromFinnhub(symbol);
-        StockData stockData =stockRepository.findBySymbol(symbol);
-        if(stockData == null){
-            stockData = new StockData();
-            stockData.setSymbol(symbol.toUpperCase());
-        }
-        mapResponseToStockData(responseMap, stockData);
-        stockRepository.save(stockData);
-        return mapToDto(stockData);
-    }
+    public Map<String,Object> fetchStockData(String symbol){
+        Map<String,Object> finnhubData = fetchStockDataFromFinnhub(symbol);
 
-    private StockData mapResponseToStockData(Map<String, Object> responseMap, StockData stockData) {
-
-        BigDecimal currentPrice = parseBigDecimal(responseMap.get("c"));
-        BigDecimal changePrice = parseBigDecimal(responseMap.get("d"));
-        Instant i = Instant.ofEpochSecond((Integer)responseMap.get("t"));
-        BigDecimal lowPrice = parseBigDecimal(responseMap.get("l"));
-        BigDecimal highPrice = parseBigDecimal(responseMap.get("h"));
-        BigDecimal percentChange = parseBigDecimal(responseMap.get("dp"));
-        BigDecimal openPrice = parseBigDecimal(responseMap.get("o"));
-        BigDecimal prevClose = parseBigDecimal(responseMap.get("pc"));
-        stockData.setCurrentPrice(currentPrice);
-        stockData.setChange(changePrice);
-        stockData.setFetchedDate(LocalDateTime.ofInstant(i, ZoneId.of("America/Los_Angeles")));
-        stockData.setLowPrice(lowPrice);
-        stockData.setHighPrice(highPrice);
-        stockData.setOpenPrice(openPrice);
-        stockData.setPrevClose(prevClose);
-        stockData.setPercentChange(percentChange);
-        return stockData;
+            StockData stockData = stockRepository.findBySymbol(symbol);
+            if (stockData == null) {
+                stockData = new StockData();
+                stockData.setSymbol(symbol.toUpperCase());
+            }
+            mapResponseToStockData(finnhubData, stockData);
+            stockRepository.save(stockData);
+        Map<String,Object> responseMap = new HashMap<>();
+        responseMap.put("id",stockData.getId());
+        responseMap.put("symbol",symbol);
+        responseMap.put("price",finnhubData.get("c"));
+        responseMap.put("change",finnhubData.get("d"));
+        responseMap.put("fetchedAt",stockData.getFetchedDate());
+        return responseMap;
     }
 
     @RateLimiter(name = "finnhubApi",fallbackMethod = "rateLimitFallBack")
@@ -83,13 +72,14 @@ public class StockService {
         Map<String, Object> response = new HashMap<>();
         try {
             response = restTemplate.getForObject(url, Map.class);
-            System.out.println("response " + response);
+            System.out.println("Finnhub response " + response);
+            if(response.get("dp")==null && response.get("d")==null ){
+                logger.error("Invalid Symbol passed");
+                throw new InvalidSymbolException(symbol);
+            }
             return response;
-        }catch(InvalidSymbolException e){
-            logger.error("Invalid input symbol" +e.getMessage());
-            throw new InvalidSymbolException("Invalid Symbol");
         }
-        catch(Exception e){
+        catch(RestClientException e){
             logger.error("Error while fetching data from finnhub" +e.getMessage());
             throw new CustomBusinessException(e.getMessage());
         }
@@ -126,17 +116,15 @@ public class StockService {
                         .forEach(this::refreshStockData);
     }
 
-    private BigDecimal parseBigDecimal(Object value){
-        try{
-            if(value==null) return BigDecimal.ZERO;
-            return new BigDecimal(value.toString());
-        }catch (Exception e){
-            return BigDecimal.ZERO;
+   // @Cacheable(value = "stock_data",key = "#symbol")
+    public Map<String,Object> fetchStockDataFromDb(String symbol) {
+       StockData stockData = stockRepository.findBySymbol(symbol);
+        System.out.println("Is stockdata available in db? "+stockData);
+        if(stockData ==null){
+            Map<String,Object> finnhubData= fetchStockDataFromFinnhub(symbol);
+            return finnhubData;
+        }else{
+            return mapToResponseMap(stockData);
         }
-    }
-    @Cacheable(value = "stock_data",key = "#symbol")
-    public StockDataDto fetchStockDataFromDb(String symbol) {
-        StockData stockData = stockRepository.findBySymbol(symbol);
-        return mapToDto(stockData);
     }
 }

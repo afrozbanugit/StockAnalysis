@@ -6,6 +6,8 @@ import com.synergisticit.stock_analysis_service.service.StockAnalysisService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -25,11 +27,10 @@ public class StockAnalysisController {
     private final static Logger logger = LoggerFactory.getLogger(StockAnalysisController.class);
 
     @GetMapping("/metrics/{symbol}")
-    public Map<String,Object> calculateMetrics(@PathVariable String symbol){
+    public ResponseEntity<Map<String,Object>> calculateMetrics(@PathVariable String symbol){
         logger.info("Retrieve Stocks Metrics");
-        Map<String,Object> map = stockAnalysisService.calculateMetrics(symbol);
-        return map;
-     //   return mapToStockMetricsResponseDto(map);
+        Map<String, Object> map = stockAnalysisService.calculateMetrics(symbol);
+        return ResponseEntity.ok(map);
     }
 
 }

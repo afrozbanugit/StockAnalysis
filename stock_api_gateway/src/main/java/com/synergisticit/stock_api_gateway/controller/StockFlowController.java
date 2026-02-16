@@ -6,6 +6,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Mono;
 
+import java.util.Map;
+
 @RestController
 @RequestMapping("/stock")
 public class StockFlowController {
@@ -15,7 +17,7 @@ public class StockFlowController {
     StockFlowService stockFlowService;
 
     @PostMapping("/full-analysis/{symbol}")
-    public Mono<CombinedResponse> fullStockAnalysis(@PathVariable String symbol){
+    public Mono<Map<String,Object>> fullStockAnalysis(@PathVariable String symbol){
 
         return stockFlowService.getFullStockAnalysis(symbol);
     }
